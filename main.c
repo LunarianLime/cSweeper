@@ -1,81 +1,362 @@
+#include "raylib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
+//TODO: Finish top HUD
+//TODO: Implement win state and lose state textures
+//TODO: Refactor?
+
+//Board constants
 const unsigned int WIDTH = 20;
 const unsigned int HEIGHT = 20;
-const unsigned int mineCount = 25;
+const unsigned int MineCount = 50;
 
-struct Game
-{
-	//unsigned int width;
-	//unsigned int height;
-	char game_board[HEIGHT][WIDTH] = {0};
-};
+//UI
+const unsigned int CellSize = 30;
+const unsigned int CellGap = 3;
+const unsigned int CellCenterX = CellSize / 3;
+const unsigned int CellCenterY = CellSize / 4;
+const unsigned int WindowWidth = WIDTH * (CellSize + CellGap) - CellGap;
+const unsigned int WindowHeight = HEIGHT * (CellSize + CellGap) - CellGap;
+const unsigned int HudHeight = 70;
+const unsigned int HudWidth = WindowWidth;
+const unsigned int RestartButtonX1 = (HudWidth - HudHeight) / 2;
+const unsigned int RestartButtonX2 = RestartButtonX1 + HudHeight;
 
-void initBoard(struct Game *game)
+typedef enum
 {
+	Closed,
+	Open,
+	Flagged
+} Cell_state;
+
+typedef struct 
+{
+	char gameBoard[HEIGHT][WIDTH];
+	Cell_state playerBoard[HEIGHT][WIDTH];
+	bool gameBoardInitialized;
+	bool gameLost;
+	bool firstClick;
+	unsigned int mineDisplay;
+	Texture2D textures[3];
+} Game;
+
+typedef struct
+{
+	int x;
+	int y;
+} Pos;
+
+Pos cellLocation(int x, int y)
+{
+	Pos cell = {0, 0};
+	y -= HudHeight;
+	cell.x += (x / (CellSize + CellGap)); 
+	cell.y += (y / (CellSize + CellGap)); 
+
+	return cell;
+}
+
+void initBoard(Game *game)
+{
+	game->gameBoardInitialized = false;
+	game->gameLost = false;
+	game->firstClick = true;
+	game->mineDisplay = MineCount;	
+
 	for(int i = 0; i < HEIGHT; i++)
 	{
 		for(int j = 0; j < WIDTH; j++)
 		{
-			game->game_board[i][j] = '0';
+			game->gameBoard[i][j] = '0';
+			game->playerBoard[i][j] = Closed;
 		}
 	}
 }
 
-void increment_cell(struct Game *game, int inc_h, int inc_w)
+void incrementCell(Game *game, int incW, int incH)
 {
-	if(inc_h > 0 && inc_h < HEIGHT && inc_w > 0 && inc_w < WIDTH && game->game_board[inc_h][inc_w] != '*')
+	if(incH >= 0 && incH < HEIGHT && incW >= 0 && incW < WIDTH && game->gameBoard[incH][incW] != '*')
 	{
-		game->game_board[inc_h][inc_w] += 1;
+		game->gameBoard[incH][incW] += 1;
 	}
 }
 
-void populateBoard(struct Game *game, unsigned int mines)
+bool neighborOfFirstClick(int rWidth, int rHeight, int x, int y)
 {
-	unsigned int r_width;
-	unsigned int r_height;
-
-	while(mines--)
+	for(int i = -1; i <= 1; i++)
 	{
-		r_width = rand() % WIDTH;
-		r_height = rand() % HEIGHT;
-		game->game_board[r_height][r_width] = '*';	
-
-		for(int i = -1; i <= 1; i++)
+		for(int j = -1; j <= 1; j++)
 		{
-			for(int j = -1; j <= 1; j++)
+			if(rWidth + j == x && rHeight + i == y) return true;
+		}
+	}
+
+	return false;
+}
+
+void populateBoard(Game *game, int x, int y)
+{
+	unsigned int rWidth;
+	unsigned int rHeight;
+	unsigned int mines = MineCount;
+
+	while(mines > 0)
+	{
+		rWidth = rand() % WIDTH;
+		rHeight = rand() % HEIGHT;
+
+		char* cell = &(game->gameBoard[rHeight][rWidth]);
+		Cell_state state = game->playerBoard[rHeight][rWidth];
+		if(*cell != '*' && !neighborOfFirstClick(rWidth, rHeight, x, y))
+		{
+			*cell = '*';
+			mines--;
+			for(int i = -1; i <= 1; i++)
 			{
-				if(i == 0 && j == 0) continue;
-				increment_cell(game, r_height + i, r_width + j);
+				for(int j = -1; j <= 1; j++)
+				{
+					if(i == 0 && j == 0) continue;
+					incrementCell(game, rWidth + j, rHeight + i);
+				}
 			}
-		}
+		}			
 	}
-
 }
 
-void printBoard(struct Game game)
+void openEmptyCells(Game *game, int x, int y)
 {
-	for(int i = 0; i < HEIGHT; i++)
+	if(x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT) return;
+	if(game->playerBoard[y][x] == Open && !(game->firstClick)) return;
+	game->firstClick = false;
+
+	game->playerBoard[y][x] = Open;
+
+	if(game->gameBoard[y][x] != '0') return;
+
+	for(int i = -1; i <= 1; i++)
 	{
-		for(int j = 0; j < WIDTH; j++)
+		for(int j = -1; j <= 1; j++)
 		{
-			printf("%c", game.game_board[i][j]);
+			if(i == 0 && j == 0) continue;
+			openEmptyCells(game, x + j, y + i);	
 		}
-		printf("\n");
 	}
 }
+
+void openNeighbors(Game *game, int x, int y)
+{
+	int flaggedNeighbors = 0;
+	int cellValue = game->gameBoard[y][x] - '0';
+	for(int i = -1; i <= 1; i++)
+	{
+		for(int j = -1; j <= 1; j++)
+		{
+			if(x + j < 0 || x + j >= WIDTH || y + i < 0 || y + i >= HEIGHT) continue;	
+			if(game->playerBoard[y + i][x + j] == Flagged) flaggedNeighbors++;
+		}
+	}
+
+	if(cellValue != flaggedNeighbors) return;	
+	
+	for(int i = -1; i <= 1; i++)
+	{
+		for(int j = -1; j <= 1; j++)
+		{
+			if(x + j < 0 || x + j >= WIDTH || y + i < 0 || y + i >= HEIGHT) continue;			
+			if(game->playerBoard[y + i][x + j] == Flagged || game->playerBoard[y + i][x + j] == Open) continue;
+
+			if(game->gameBoard[y + i][x + j] == '0')
+			{
+				openEmptyCells(game, x + j, y + i);
+			}
+			else if(game->gameBoard[y + i][x + j] == '*')
+			{
+				game->gameLost = true;
+			}
+
+			game->playerBoard[y + i][x + j] = Open;
+		}
+	}	
+}
+
+void leftClick(Game *game)
+{
+	Pos clickPos;
+	Pos clickedCell;
+
+	clickPos.x = GetMouseX();		
+	clickPos.y = GetMouseY();
+	if(clickPos.y <= HudHeight)
+	{
+		//Restart button
+		if(clickPos.x >= RestartButtonX1 && clickPos.x <= RestartButtonX2)
+		{
+			initBoard(game);
+		}
+		return;
+	}
+
+	if(game->gameLost) return;
+
+	clickedCell = cellLocation(clickPos.x, clickPos.y);
+
+	//First click is always safe
+	if(!(game->gameBoardInitialized))
+	{
+		game->playerBoard[clickedCell.y][clickedCell.x] = Open;
+		populateBoard(game, clickedCell.x, clickedCell.y);
+		game->gameBoardInitialized = true;
+	}
+			
+	if(game->gameBoard[clickedCell.y][clickedCell.x] == '0')
+	{
+		openEmptyCells(game, clickedCell.x, clickedCell.y);
+	}
+	else if(game->gameBoard[clickedCell.y][clickedCell.x] == '*')
+	{
+		game->gameLost = true;
+		game->playerBoard[clickedCell.y][clickedCell.x] = Open;	
+	}
+	else
+	{
+		game->playerBoard[clickedCell.y][clickedCell.x] = Open;
+	}			
+}
+
+void rightClick(Game *game)
+{	
+	if(game->gameLost) return;
+
+	Pos clickPos;
+	Pos clickedCell;
+
+	clickPos.x = GetMouseX();		
+	clickPos.y = GetMouseY();
+	if(clickPos.y <= HudHeight) return;
+
+	clickedCell = cellLocation(clickPos.x, clickPos.y);
+
+	Cell_state *cell = &(game->playerBoard[clickedCell.y][clickedCell.x]);
+
+	if(*cell == Open)
+	{
+		openNeighbors(game, clickedCell.x, clickedCell.y);
+	}
+	else if(*cell == Flagged)
+	{
+		*cell = Closed;
+		game->mineDisplay += 1;
+	}
+	else if(*cell == Closed)
+	{
+		*cell = Flagged;
+		game->mineDisplay -= 1;
+	}
+}
+
+void printBoard(Game game)
+{
+	ClearBackground(LIGHTGRAY);
+	Color cellColor;
+	for(int y = 0; y < HEIGHT; y++)
+	{
+		for(int x = 0; x < WIDTH; x++)
+		{
+			int cellX = x * (CellSize + CellGap);
+			int cellY = y * (CellSize + CellGap);
+
+			if(game.playerBoard[y][x] == Open)
+			{
+				char cellState = game.gameBoard[y][x];
+				if(cellState == '*')
+				{
+					DrawTexture(game.textures[2], cellX, cellY +HudHeight, WHITE);
+					continue;
+				}
+				else if(cellState == '0') cellColor = GRAY;
+			   	else if(cellState == '1') cellColor = BLUE;	
+				else if(cellState == '2') cellColor = GREEN;
+				else if(cellState == '3') cellColor = ORANGE;
+				else if(cellState == '4') cellColor = DARKPURPLE;
+				else if(cellState == '5') cellColor = MAROON;
+				else if(cellState == '6') cellColor = SKYBLUE;
+				else if(cellState == '7') cellColor = BEIGE;
+				else if(cellState == '8') cellColor = DARKBROWN;
+
+				char cellText[2] = {cellState, '\0'};
+				DrawText(cellText, cellX + CellCenterX, cellY + CellCenterY + HudHeight, 24, cellColor);
+			}	
+			else if(game.playerBoard[y][x] == Flagged)
+			{
+				DrawTexture(game.textures[1], cellX, cellY + HudHeight, WHITE);	
+			}
+			else
+			{	
+				cellColor = GRAY;
+				DrawRectangle(cellX, cellY + HudHeight, CellSize, CellSize, cellColor);
+			}	
+		}
+	}	
+}
+
+void printHud(Game game)
+{
+	//Mines remaining
+	DrawText("Mines remaining: ", 5, HudHeight / 3, 24, BLACK);
+	char minesRemainingText[3];
+	sprintf(minesRemainingText, "%d", game.mineDisplay);
+	DrawText(minesRemainingText, 195, HudHeight / 3 + 2, 24, BLACK);
+
+	//Restart button
+	DrawTexture(game.textures[0], RestartButtonX1, 10, WHITE);
+	Rectangle rec = {RestartButtonX1, 10, HudHeight - 20, HudHeight - 20};
+	DrawRectangleLinesEx(rec, 2, BLACK);
+
+	//Timer
+	DrawText("Time:", HudWidth - 100, HudHeight / 3, 24, BLACK);
+}
+
+void LoadTextures(Game *game)
+{
+	game->textures[0] = LoadTexture("./resources/minesweeper_smiley.png");
+	game->textures[1] = LoadTexture("./resources/minesweeper_flag.png");
+	game->textures[2] = LoadTexture("./resources/minesweeper_mine.png");
+}	
 
 int main()
 {
 	srand(time(NULL));
 
-	Game newGame;
-	initBoard(&newGame);
-	populateBoard(&newGame, mineCount);
+	Game game;
+	initBoard(&game);
 
-	printBoard(newGame);
+	InitWindow(WindowWidth, WindowHeight + HudHeight, "CSweeper");
+	SetTargetFPS(15);
+	LoadTextures(&game);
+	while(!WindowShouldClose())
+	{
+		BeginDrawing();
+
+		printBoard(game);
+		printHud(game);
+
+		EndDrawing();
+
+		if(IsMouseButtonReleased(0)) 
+		{
+			leftClick(&game); 	
+		}	
+		//TODO: Space button scan code is different for different OSes
+		else if(IsMouseButtonPressed(1) || IsKeyPressed(32))
+		{
+			rightClick(&game);	
+		}
+	}
+
+	CloseWindow();
 
 	return 0;
 }
