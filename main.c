@@ -1,11 +1,13 @@
 #include "raylib.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 #include <string.h>
+#include <time.h>
 
-//TODO: Finish top HUD
 //TODO: Implement win state and lose state textures
+//TODO: Implement customization?
+//TODO: Icons?
 //TODO: Refactor?
 
 //Board constants
@@ -38,8 +40,10 @@ typedef struct
 	Cell_state playerBoard[HEIGHT][WIDTH];
 	bool gameBoardInitialized;
 	bool gameLost;
+	bool gameWon;
 	bool firstClick;
 	unsigned int mineDisplay;
+	float timeElapsed;
 	Texture2D textures[3];
 } Game;
 
@@ -63,8 +67,10 @@ void initBoard(Game *game)
 {
 	game->gameBoardInitialized = false;
 	game->gameLost = false;
+	game->gameWon = false;
 	game->firstClick = true;
 	game->mineDisplay = MineCount;	
+	game->timeElapsed = 0.0;
 
 	for(int i = 0; i < HEIGHT; i++)
 	{
@@ -257,6 +263,18 @@ void rightClick(Game *game)
 	}
 }
 
+void checkIfGameWon(Game *game)
+{
+	for(int y = 0; y < HEIGHT; y++)
+	{
+		for(int x = 0; x < WIDTH; x++)
+		{
+			if(game->playerBoard[y][x] == Closed) return;
+		}
+	}
+	game->gameWon = true;
+}
+
 void printBoard(Game game)
 {
 	ClearBackground(LIGHTGRAY);
@@ -305,10 +323,10 @@ void printBoard(Game game)
 void printHud(Game game)
 {
 	//Mines remaining
-	DrawText("Mines remaining: ", 5, HudHeight / 3, 24, BLACK);
-	char minesRemainingText[3];
-	sprintf(minesRemainingText, "%d", game.mineDisplay);
-	DrawText(minesRemainingText, 195, HudHeight / 3 + 2, 24, BLACK);
+	DrawText("Mines left: ", 5, HudHeight / 3, 24, BLACK);
+	char minesLeftText[3];
+	sprintf(minesLeftText, "%d", game.mineDisplay);
+	DrawText(minesLeftText, 135, HudHeight / 3 + 2, 24, BLACK);
 
 	//Restart button
 	DrawTexture(game.textures[0], RestartButtonX1, 10, WHITE);
@@ -316,7 +334,10 @@ void printHud(Game game)
 	DrawRectangleLinesEx(rec, 2, BLACK);
 
 	//Timer
-	DrawText("Time:", HudWidth - 100, HudHeight / 3, 24, BLACK);
+	DrawText("Time:", HudWidth - 120, HudHeight / 3, 24, BLACK);
+	char timeElapsedStr[4];
+	sprintf(timeElapsedStr, "%d", (int)game.timeElapsed); 
+	DrawText(timeElapsedStr, HudWidth - 55, HudHeight / 3 + 2, 24, BLACK);
 }
 
 void LoadTextures(Game *game)
@@ -334,7 +355,7 @@ int main()
 	initBoard(&game);
 
 	InitWindow(WindowWidth, WindowHeight + HudHeight, "CSweeper");
-	SetTargetFPS(15);
+	SetTargetFPS(30);
 	LoadTextures(&game);
 	while(!WindowShouldClose())
 	{
@@ -344,6 +365,13 @@ int main()
 		printHud(game);
 
 		EndDrawing();
+
+		if(game.mineDisplay == 0) checkIfGameWon(&game);
+
+		if(!game.firstClick && !game.gameLost && !game.gameWon)
+		{	
+			game.timeElapsed += GetFrameTime();
+		}
 
 		if(IsMouseButtonReleased(0)) 
 		{
