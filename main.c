@@ -5,7 +5,6 @@
 #include <string.h>
 #include <time.h>
 
-//TODO: Implement win state and lose state textures
 //TODO: Implement customization?
 //TODO: Icons?
 //TODO: Refactor?
@@ -44,7 +43,7 @@ typedef struct
 	bool firstClick;
 	unsigned int mineDisplay;
 	float timeElapsed;
-	Texture2D textures[3];
+	Texture2D textures[5];
 } Game;
 
 typedef struct
@@ -291,7 +290,7 @@ void printBoard(Game game)
 				char cellState = game.gameBoard[y][x];
 				if(cellState == '*')
 				{
-					DrawTexture(game.textures[2], cellX, cellY +HudHeight, WHITE);
+					DrawTexture(game.textures[4], cellX, cellY +HudHeight, WHITE);
 					continue;
 				}
 				else if(cellState == '0') cellColor = GRAY;
@@ -309,7 +308,7 @@ void printBoard(Game game)
 			}	
 			else if(game.playerBoard[y][x] == Flagged)
 			{
-				DrawTexture(game.textures[1], cellX, cellY + HudHeight, WHITE);	
+				DrawTexture(game.textures[3], cellX, cellY + HudHeight, WHITE);	
 			}
 			else
 			{	
@@ -329,7 +328,11 @@ void printHud(Game game)
 	DrawText(minesLeftText, 135, HudHeight / 3 + 2, 24, BLACK);
 
 	//Restart button
-	DrawTexture(game.textures[0], RestartButtonX1, 10, WHITE);
+	Texture2D smiley;
+	if(game.gameLost) smiley = game.textures[1];
+	else if(game.gameWon) smiley = game.textures[2];
+	else smiley = game.textures[0];
+	DrawTexture(smiley, RestartButtonX1, 10, WHITE);
 	Rectangle rec = {RestartButtonX1, 10, HudHeight - 20, HudHeight - 20};
 	DrawRectangleLinesEx(rec, 2, BLACK);
 
@@ -342,9 +345,11 @@ void printHud(Game game)
 
 void LoadTextures(Game *game)
 {
-	game->textures[0] = LoadTexture("./resources/minesweeper_smiley.png");
-	game->textures[1] = LoadTexture("./resources/minesweeper_flag.png");
-	game->textures[2] = LoadTexture("./resources/minesweeper_mine.png");
+	game->textures[0] = LoadTexture("./resources/smiley.png");
+	game->textures[1] = LoadTexture("./resources/smiley_lose.png");
+	game->textures[2] = LoadTexture("./resources/smiley_win.png");
+	game->textures[3] = LoadTexture("./resources/flag.png");
+	game->textures[4] = LoadTexture("./resources/mine.png");
 }	
 
 int main()
@@ -357,6 +362,8 @@ int main()
 	InitWindow(WindowWidth, WindowHeight + HudHeight, "CSweeper");
 	SetTargetFPS(30);
 	LoadTextures(&game);
+	Image icon = LoadImage("./resources/mine.png");
+	SetWindowIcon(icon);
 	while(!WindowShouldClose())
 	{
 		BeginDrawing();
