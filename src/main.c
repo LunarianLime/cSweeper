@@ -345,11 +345,11 @@ void printHud(Game game)
 
 void LoadTextures(Game *game)
 {
-	game->textures[0] = LoadTexture("./resources/smiley.png");
-	game->textures[1] = LoadTexture("./resources/smiley_lose.png");
-	game->textures[2] = LoadTexture("./resources/smiley_win.png");
-	game->textures[3] = LoadTexture("./resources/flag.png");
-	game->textures[4] = LoadTexture("./resources/mine.png");
+	game->textures[0] = LoadTexture("../resources/smiley.png");
+	game->textures[1] = LoadTexture("../resources/smiley_lose.png");
+	game->textures[2] = LoadTexture("../resources/smiley_win.png");
+	game->textures[3] = LoadTexture("../resources/flag.png");
+	game->textures[4] = LoadTexture("../resources/mine.png");
 }	
 
 int main()
@@ -362,7 +362,7 @@ int main()
 	InitWindow(WindowWidth, WindowHeight + HudHeight, "CSweeper");
 	SetTargetFPS(30);
 	LoadTextures(&game);
-	Image icon = LoadImage("./resources/mine.png");
+	Image icon = LoadImage("../resources/mine.png");
 	SetWindowIcon(icon);
 	while(!WindowShouldClose())
 	{
